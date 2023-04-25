@@ -1,5 +1,5 @@
 mob <- function(formula, data, subset, na.action, weights, offset, cluster,
-  fit, control = mob_control(), ...)
+  fit, control = mob_control(), glm.weights=weights, ...)
 {
   ## check fitting function
   fitargs <- names(formals(fit))
@@ -120,7 +120,7 @@ mob <- function(formula, data, subset, na.action, weights, offset, cluster,
 
   ## grow the actual tree
   nodes <- mob_partynode(Y = Y, X = X, Z = Z, weights = weights, offset = offset, cluster = cluster,
-    fit = afit, control = control, varindex = varindex, ...)
+    fit = afit, control = control, varindex = varindex, glm.weights=glm.weights, ...)
 
   ## compute terminal node number for each observation
   fitted <- fitted_node(nodes, data = mf)
@@ -154,7 +154,7 @@ mob <- function(formula, data, subset, na.action, weights, offset, cluster,
 
 ## set up partynode object
 mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL,
-  fit, control = mob_control(), varindex = 1L:NCOL(Z), ...)
+  fit, control = mob_control(), varindex = 1L:NCOL(Z), glm.weights=weights, ...)
 {
   ## are there regressors?
   if(missing(X)) X <- NULL
@@ -162,6 +162,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
   n <- nrow(Z)
   if(is.null(weights)) weights <- 1L
   if(length(weights) < n) weights <- rep(weights, length.out = n)
+  if(is.null(glm.weights)) glm.weights <- weights
 
   ## control parameters (used repeatedly)
   minsize <- control$minsize
@@ -381,7 +382,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
   }
 
   ### split in variable zselect, either ordered (numeric or ordinal) or nominal
-  mob_grow_findsplit <- function(y, x, zselect, weights, offset, cluster, ...)
+  mob_grow_findsplit <- function(y, x, zselect, weights, offset, cluster, glm.weights,...)
   {
     ## process minsize (to minimal number of observations)
     if(minsize > 0.5 & minsize < 1) minsize <- 1 - minsize
@@ -400,9 +401,9 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
             return(Inf)
           } else {
             fit_left <- fit(y = suby(y, zs), x = subx(x, zs), start = NULL,
-	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], ...)
+	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], glm.weights=glm.weights[zs], ...)
             fit_right <- fit(y = suby(y, !zs), x = subx(x, !zs), start = NULL,
-	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[!zs], ...)
+	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[!zs], glm.weights=glm.weights[!zs], ...)
 	    return(fit_left$objfun + fit_right$objfun)
           }
 	}
@@ -428,9 +429,9 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
             dev[i] <- Inf
           } else {
             fit_left <- fit(y = suby(y, zs), x = subx(x, zs), start = start_left,
-	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], ...)
+	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], glm.weights=glm.weights[zs],...)
             fit_right <- fit(y = suby(y, !zs), x = subx(x, !zs), start = start_right,
-	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[!zs], ...)
+	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[!zs], glm.weights=glm.weights[!zs], ...)
   	    start_left <- fit_left$coefficients
 	    start_right <- fit_right$coefficients
 	    dev[i] <- fit_left$objfun + fit_right$objfun
@@ -474,9 +475,9 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
         } else {
 	  if(nrow(al) == 1L) 1 else {
             fit_left <- fit(y = suby(y, zs), x = subx(x, zs), start = NULL,
-	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], ...)
+	      weights = weights[zs], offset = offset[zs], cluster = cluster[zs], glm.weights=glm.weights[zs],...)
             fit_right <- fit(y = suby(y, !zs), x = subx(x, !zs), start = NULL,
-	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[zs], ...)
+	      weights = weights[!zs], offset = offset[!zs], cluster = cluster[zs], glm.weights=glm.weights[!zs],...)
     	    fit_left$objfun + fit_right$objfun
 	  }
         }
@@ -513,7 +514,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
 
   ## grow tree by combining fluctuation tests for variable selection
   ## and split selection recursively
-  mob_grow <- function(id = 1L, y, x, z, weights, offset, cluster, ...)
+  mob_grow <- function(id = 1L, y, x, z, weights, offset, cluster, glm.weights, ...)
   {
     if(verbose) {
       if(id == 1L) cat("\n")
@@ -524,7 +525,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
 
     ## fit model
     mod <- fit(y, x, weights = weights, offset = offset, cluster = cluster, ...,
-      estfun = TRUE, object = terminal$object | control$vcov == "info")
+      estfun = TRUE, object = terminal$object | control$vcov == "info", glm.weights=glm.weights)
     mod$test <- NULL
     mod$nobs <- w2n(weights)
     mod$p.value <- NULL
@@ -579,7 +580,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
       return(partynode(id = id, info = mod))
     } else {
       zselect <- z[[best]]
-      sp <- mob_grow_findsplit(y, x, zselect, weights, offset, cluster, ...)
+      sp <- mob_grow_findsplit(y, x, zselect, weights, offset, cluster, glm.weights, ...)
     
       ## split successful?
       if(is.null(sp$breaks) & is.null(sp$index)) {
@@ -611,7 +612,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
 
       ## start recursion on this daugther node
       kids[[kidid]] <- mob_grow(id = myid + 1L,
-        suby(y, nxt), subx(x, nxt), subz(z, nxt), weights[nxt], offset[nxt], cluster[nxt], ...)
+        suby(y, nxt), subx(x, nxt), subz(z, nxt), weights[nxt], offset[nxt], cluster[nxt], glm.weights[nxt], ...)
     }
     depth <<- depth - 1L
 
@@ -677,7 +678,7 @@ mob_partynode <- function(Y, X, Z, weights = NULL, offset = NULL, cluster = NULL
 
   ## grow tree
   depth <- 1L
-  nodes <- mob_grow(id = 1L, Y, X, Z, weights, offset, cluster, ...)
+  nodes <- mob_grow(id = 1L, Y, X, Z, weights, offset, cluster, glm.weights, ...)
 
   ## prune tree
   if(verbose && !is.null(control$prune)) cat("-- Post-pruning ---------------------------\n")

@@ -1,6 +1,6 @@
 ## simple wrapper function to specify fitter and return class
 glmtree <- function(formula, data, subset, na.action, weights, offset, cluster,
-  family = gaussian, epsilon = 1e-8, maxit = 25, method = "glm.fit", ...)
+  family = gaussian, epsilon = 1e-8, maxit = 25, method = "glm.fit", glm.weights=weights, ...)
 {
   ## use dots for setting up mob_control
   control <- mob_control(...)
@@ -28,10 +28,10 @@ glmtree <- function(formula, data, subset, na.action, weights, offset, cluster,
 
   ## distinguish whether glm should be fixed for case weights or not
   glmfit0 <- function(y, x, start = NULL, weights = NULL, offset = NULL, cluster = NULL, ...,
-    estfun = FALSE, object = FALSE, caseweights = TRUE)
+    estfun = FALSE, object = FALSE, caseweights = TRUE, glm.weights=glm.weights)
   {
     glmfit(y = y, x = x, start = start, weights = weights, offset = offset, cluster = cluster, ...,
-      estfun = estfun, object = object, caseweights = control$caseweights)
+      estfun = estfun, object = object, caseweights = control$caseweights, glm.weights=glm.weights)
   }
 
   ## call mob
@@ -56,7 +56,7 @@ glmtree <- function(formula, data, subset, na.action, weights, offset, cluster,
 
 ## actual fitting function for mob()
 glmfit <- function(y, x, start = NULL, weights = NULL, offset = NULL, cluster = NULL, ...,
-  estfun = FALSE, object = FALSE, caseweights = TRUE)
+  estfun = FALSE, object = FALSE, caseweights = TRUE, glm.weights=weights)
 {
   ## catch control arguments
   args <- list(...)
@@ -77,7 +77,7 @@ glmfit <- function(y, x, start = NULL, weights = NULL, offset = NULL, cluster = 
   ## call glm fitting function (defaulting to glm.fit)
   glm.method <- if("method" %in% names(args)) args[["method"]] else "glm.fit"
   args[["method"]] <- NULL
-  args <- c(list(x = x, y = y, start = start, weights = weights, offset = offset), args)
+  args <- c(list(x = x, y = y, start = start, weights = weights, offset = offset,weights=glm.weights), args)
   z <- do.call(glm.method, args)
 
   ## degrees of freedom
@@ -100,8 +100,8 @@ glmfit <- function(y, x, start = NULL, weights = NULL, offset = NULL, cluster = 
       1
     } else {
       ## for case weights: fix dispersion estimate
-      if(!is.null(weights) && caseweights) {
-        sum(wres^2/weights, na.rm = TRUE)/sum(z$weights, na.rm = TRUE)
+      if(!is.null(glm.weights) && caseweights) {
+        sum(wres^2/glm.weights, na.rm = TRUE)/sum(z$weights, na.rm = TRUE)
       } else {
         sum(wres^2, na.rm = TRUE)/sum(z$weights, na.rm = TRUE)
       }
@@ -123,9 +123,9 @@ glmfit <- function(y, x, start = NULL, weights = NULL, offset = NULL, cluster = 
     z$terms <- attr(x, "terms")
 
     ## for case weights: change degrees of freedom
-    if(!is.null(weights) && caseweights) {
-      z$df.null     <- z$df.null     - sum(weights > 0) + sum(weights)
-      z$df.residual <- z$df.residual - sum(weights > 0) + sum(weights)
+    if(!is.null(glm.weights) && caseweights) {
+      z$df.null     <- z$df.null     - sum(glm.weights > 0) + sum(glm.weights)
+      z$df.residual <- z$df.residual - sum(glm.weights > 0) + sum(glm.weights)
     }
 
     rval$object <- z
